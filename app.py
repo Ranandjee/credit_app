@@ -679,7 +679,9 @@ def page_data(df: pd.DataFrame):
             valid, missing = validate_schema(user_df)
 
             if valid:
-                st.success("Schema validated – using uploaded data (for this page only, not persisted).")
+                # ✅ Persist this dataset for all other pages
+                st.session_state["current_df"] = user_df
+                st.success("Schema validated – using uploaded data for all pages in this session.")
                 st.dataframe(user_df.head(10))
             else:
                 st.error(f"Missing required columns: {missing}")
@@ -689,13 +691,16 @@ def page_data(df: pd.DataFrame):
                 )
     else:
         st.success("Using bundled synthetic dataset (no real borrower data).")
-        st.dataframe(df.head(10))
+        # (Optional) reset to default
+        st.dataframe(st.session_state["current_df"].head(10))
+
 
     st.info(
         "🔒 **Confidentiality Notice:** All uploaded data is processed locally in this session. "
         "No borrower identifiers or raw financial statements are transmitted outside the app. "
         "Only derived ratios may be used for AI explanations."
     )
+
 
 # --------------------------------------------------
 # PAGE: RISK & STRESS TESTING
@@ -1287,13 +1292,17 @@ def main():
         unsafe_allow_html=True,
     )
 
-    df = load_sample_data()
+    # Initialize session dataset once
+    if "current_df" not in st.session_state:
+        st.session_state["current_df"] = load_sample_data()
 
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
         "Go to:",
         ["Overview", "Data & Setup", "Risk & Stress Testing", "Optimization", "AI Credit Memo", "About"]
     )
+
+    df = st.session_state["current_df"]
 
     if page == "Overview":
         page_overview(df)
@@ -1307,6 +1316,7 @@ def main():
         page_ai(df)
     elif page == "About":
         page_about()
+
 
     # Footer
     st.markdown(
