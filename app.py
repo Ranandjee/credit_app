@@ -911,12 +911,15 @@ def page_optimization(df: pd.DataFrame):
 
     st.write(
         "This optimizer selects a set of borrowers to **lend to** by maximizing a risk-adjusted expected profit, "
-        "subject to a capital budget and a cap on the portfolio's average PD."
+        "subject to a capital budget (maximum total exposure) and a cap on the portfolio’s average PD."
     )
 
     st.markdown("---")
     use_stress = st.checkbox("Optimize using **stressed PDs** under a scenario", value=False)
 
+    # -----------------------------
+    # Choose base vs stressed PDs
+    # -----------------------------
     if use_stress:
         scenario = st.selectbox(
             "Optimization scenario preset",
@@ -947,26 +950,34 @@ def page_optimization(df: pd.DataFrame):
         pd_col = "pd"
         st.caption("Optimization uses base-case PDs.")
 
+    # -----------------------------
+    # Portfolio-level stats
+    # -----------------------------
     total_debt = df_for_opt["total_debt"].sum()
-    avg_pd = df_for_opt[pd_col].mean() * 100
+    avg_pd = df_for_opt[pd_col].mean() * 100  # in %
 
+    # -----------------------------
+    # Optimization controls
+    # -----------------------------
     col1, col2 = st.columns(2)
     with col1:
         budget = st.number_input(
-            "Capital budget (sum of total_debt for selected borrowers)",
-            min_value=float(total_debt * 0.1),
+            "Capital budget (maximum total portfolio exposure)",
+            min_value=0.0,
             max_value=float(total_debt),
-            value=float(total_debt * 0.4),
+            value=float(min(total_debt * 0.4, total_debt)),  # default: 40% of book
             step=1_000_000.0,
             format="%.0f",
+            help="Upper limit on the sum of total_debt across all selected borrowers."
         )
     with col2:
         max_avg_pd = st.slider(
-            "Max average portfolio PD (%) (approximate)",
+            "Max allowed weighted-average portfolio PD (%)",
             min_value=1.0,
             max_value=float(max(30.0, avg_pd + 5)),
             value=min(float(avg_pd + 3), 12.0),
             step=0.5,
+            help="Caps the exposure-weighted average PD of the optimized portfolio."
         )
 
     lgd_pct = st.slider(
@@ -978,6 +989,9 @@ def page_optimization(df: pd.DataFrame):
         help="Used in expected profit calculation as PD × LGD."
     )
 
+    # -----------------------------
+    # Run optimization
+    # -----------------------------
     if st.button("Run Optimization"):
         result, error = optimize_portfolio(
             df_for_opt,
@@ -992,6 +1006,9 @@ def page_optimization(df: pd.DataFrame):
 
         df_opt, stats = result
 
+        # -------------------------
+        # Summary metrics
+        # -------------------------
         section_title("Optimization Results – Portfolio Summary")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -1029,6 +1046,9 @@ def page_optimization(df: pd.DataFrame):
                 use_container_width=True,
             )
 
+        # -------------------------
+        # PD vs exposure scatter
+        # -------------------------
         section_title("PD vs Exposure – Optimization Decisions")
         plot_df = df_opt.copy()
         plot_df["pd_pct"] = plot_df["_pd_used"] * 100
@@ -1055,6 +1075,7 @@ def page_optimization(df: pd.DataFrame):
             "Choose whether to optimize on base or stressed PDs, set your capital budget, PD limit, and LGD, "
             "then click **Run Optimization**."
         )
+
 
 # --------------------------------------------------
 # PAGE: AI CREDIT MEMO (styled & downloadable)
