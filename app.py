@@ -666,21 +666,46 @@ def page_data(df: pd.DataFrame):
 
     st.markdown("---")
 
+    # --- Initialize session flags ---
+    if "data_source" not in st.session_state:
+        st.session_state["data_source"] = "bundled"
+    if "has_uploaded_data" not in st.session_state:
+        st.session_state["has_uploaded_data"] = False
+
     choice = st.radio(
         "Choose data source:",
         ["Use bundled synthetic dataset", "Upload CSV"],
-        index=0
+        index=0 if st.session_state["data_source"] == "bundled" else 1,
+        key="data_source_radio",
     )
 
-    if choice == "Upload CSV":
-        file = st.file_uploader("Upload borrower CSV (must match template schema)", type=["csv"])
-        if file:
+    # ---------------------------
+    # Bundled dataset branch
+    # ---------------------------
+    if choice == "Use bundled synthetic dataset":
+        st.session_state["data_source"] = "bundled"
+        st.session_state["current_df"] = load_sample_data()
+        st.success("Using bundled synthetic dataset (no real borrower data).")
+        st.dataframe(st.session_state["current_df"].head(10))
+
+    # ---------------------------
+    # Upload branch
+    # ---------------------------
+    else:
+        st.session_state["data_source"] = "uploaded"
+        file = st.file_uploader(
+            "Upload borrower CSV (must match template schema)",
+            type=["csv"],
+            key="upload_csv",
+        )
+
+        if file is not None:
             user_df = pd.read_csv(file)
             valid, missing = validate_schema(user_df)
 
             if valid:
-                # ✅ Persist this dataset for all other pages
                 st.session_state["current_df"] = user_df
+                st.session_state["has_uploaded_data"] = True
                 st.success("Schema validated – using uploaded data for all pages in this session.")
                 st.dataframe(user_df.head(10))
             else:
@@ -689,17 +714,20 @@ def page_data(df: pd.DataFrame):
                     "Please align your file with the downloadable template above. "
                     "Column mapping has been disabled to keep the pipeline simple and consistent."
                 )
-    else:
-        st.success("Using bundled synthetic dataset (no real borrower data).")
-        # (Optional) reset to default
-        st.dataframe(st.session_state["current_df"].head(10))
-
+        else:
+            # No file currently in the uploader, but maybe we already have an uploaded df
+            if st.session_state.get("has_uploaded_data", False):
+                st.success("Using previously uploaded data for all pages in this session.")
+                st.dataframe(st.session_state["current_df"].head(10))
+            else:
+                st.info("No file uploaded yet. Please upload a CSV that matches the template schema.")
 
     st.info(
         "🔒 **Confidentiality Notice:** All uploaded data is processed locally in this session. "
         "No borrower identifiers or raw financial statements are transmitted outside the app. "
         "Only derived ratios may be used for AI explanations."
     )
+
 
 
 # --------------------------------------------------
